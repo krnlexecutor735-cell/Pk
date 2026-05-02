@@ -7,7 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 
-local ConfigFile = "PunConfig_V7.json"
+local ConfigFile = "PunConfig_V9.json"
 local State = {
     SelectionActive = false, ShowFriendName = true, FriendColor = {255, 255, 255}, FriendTextSize = 14,
     ClickSelected = {}, AdvSelected = {}, AdvHighlightEnabled = false, EveryoneEnabled = false,
@@ -15,6 +15,7 @@ local State = {
     CustomNames = {}, CustomNameEnabled = {}, CustomColors = {}, CustomColorEnabled = {},
     CustomTextSizes = {}, CustomTextSizeEnabled = {}, MultiTargetNames = {},
     AimEnabled = false, AimFOV = 150, AimColor = {48, 255, 106}, RainbowAim = false,
+    AimThroughWall = false, -- เพิ่มสถานะปุ่มเล็งทะลุกำแพง
     WalkSpeed = 16, JumpPower = 50, InfJump = false, Fling = false, Noclip = false
 }
 
@@ -38,6 +39,22 @@ local function GetPlrs()
     local t = {}
     for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(t, p.Name) end end
     return t
+end
+
+local function IsVisible(part, character)
+    if State.AimThroughWall then return true end -- ถ้าเปิดปุ่มเล็งทะลุกำแพง ให้คืนค่า true ทันที
+    
+    local origin = Camera.CFrame.Position
+    local destination = part.Position
+    local direction = (destination - origin).Unit * (destination - origin).Magnitude
+    
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character, character, Camera}
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.IgnoreWater = true
+    
+    local result = workspace:Raycast(origin, direction, rayParams)
+    return result == nil
 end
 
 local function ApplyVisuals(plr)
@@ -96,6 +113,7 @@ T3:Toggle({ Title = "ยืนยันการขยาย", Value = false, Ca
 
 local T4 = Window:Tab({ Title = "เล็งเป้าหมาย", Icon = "crosshair" })
 T4:Toggle({ Title = "ปุ่มเล็งหัว", Value = State.AimEnabled, Callback = function(v) State.AimEnabled = v Save() end })
+T4:Toggle({ Title = "เล็งทะลุกำแพง", Value = State.AimThroughWall, Callback = function(v) State.AimThroughWall = v Save() end })
 T4:Toggle({ Title = "โหมดสายรุ้งสมูท", Value = State.RainbowAim, Callback = function(v) State.RainbowAim = v Save() end })
 T4:Colorpicker({ Title = "สีเป้าหมาย", Default = GetC3(State.AimColor), Callback = function(v) State.AimColor = {math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255)} Save() end })
 T4:Slider({ Title = "ระยะการเล็ง", Step = 1, Value = { Min = 10, Max = 800, Default = State.AimFOV }, Callback = function(v) State.AimFOV = v Save() end })
@@ -155,10 +173,13 @@ RS.RenderStepped:Connect(function()
         local target, close = nil, State.AimFOV
         for _, v in pairs(Players:GetPlayers()) do
             if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") then
-                local p, vis = Camera:WorldToViewportPoint(v.Character.Head.Position)
+                local head = v.Character.Head
+                local p, vis = Camera:WorldToViewportPoint(head.Position)
                 if vis then
                     local mag = (Vector2.new(p.X, p.Y) - mid).Magnitude
-                    if mag < close then close, target = mag, v end
+                    if mag < close and IsVisible(head, v.Character) then 
+                        close, target = mag, v 
+                    end
                 end
             end
         end
